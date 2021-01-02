@@ -1,4 +1,5 @@
 import torch.nn as nn
+from IntmdSequential import IntermediateSequential
 
 
 class SelfAttention(nn.Module):
@@ -112,7 +113,7 @@ class TransformerModel(nn.Module):
                     ),
                 ]
             )
-        self.net = nn.Sequential(*layers)
+        self.net = IntermediateSequential(*layers)
 
     def forward(self, x):
         return self.net(x)

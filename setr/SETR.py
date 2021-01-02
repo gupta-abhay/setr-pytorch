@@ -5,6 +5,8 @@ from PositionalEncoding import (
     FixedPositionalEncoding,
     LearnedPositionalEncoding,
 )
+from IntmdSequential import IntermediateSequential
+
 
 __all__ = [
     'SETR_Naive_S',
@@ -106,19 +108,30 @@ class SegmentationTransformer(nn.Module):
         x = self.pe_dropout(x)
 
         # apply transformer
-        x = self.transformer(x)
+        x, intmd_x = self.transformer(x)
         x = self.pre_head_ln(x)
 
-        return x
+        return x, intmd_x
 
     def decode(self, x):
         raise NotImplementedError("Should be implemented in child class!!")
 
-    def forward(self, x):
-        encoder_output = self.encode(x)
-        decoder_output = self.decode(encoder_output)
+    def forward(self, x, auxillary_output_layers=None):
+        encoder_output, intmd_encoder_outputs = self.encode(x)
+        decoder_output = self.decode(
+            encoder_output, intmd_encoder_outputs, auxillary_output_layers
+        )
 
-        return encoder_output, decoder_output
+        if auxillary_output_layers is not None:
+            auxillary_outputs = {}
+            for i in auxillary_output_layers:
+                val = str(2 * i - 1)
+                _key = 'Z' + str(i)
+                auxillary_outputs[_key] = intmd_encoder_outputs[val]
+
+            return decoder_output, auxillary_outputs
+
+        return decoder_output
 
     def _get_padding(self, padding_type, kernel_size):
         assert padding_type in ['SAME', 'VALID']
@@ -126,6 +139,16 @@ class SegmentationTransformer(nn.Module):
             _list = [(k - 1) // 2 for k in kernel_size]
             return tuple(_list)
         return tuple(0 for _ in kernel_size)
+
+    def _reshape_output(self, x):
+        x = x.view(
+            x.size(0),
+            int(self.img_dim / self.patch_dim),
+            int(self.img_dim / self.patch_dim),
+            self.embedding_dim,
+        )
+        x = x.permute(0, 3, 1, 2).contiguous()
+        return x
 
 
 class SETR_Naive(SegmentationTransformer):
@@ -160,15 +183,8 @@ class SETR_Naive(SegmentationTransformer):
 
         self.num_classes = num_classes
 
-    def decode(self, x):
-        x = x.view(
-            x.size(0),
-            int(self.img_dim / self.patch_dim),
-            int(self.img_dim / self.patch_dim),
-            self.embedding_dim,
-        )
-        x = x.permute(0, 3, 1, 2).contiguous()
-
+    def decode(self, x, intmd_x, intmd_layers=None):
+        x = self._reshape_output(x)
         x = nn.Conv2d(
             in_channels=self.embedding_dim,
             out_channels=self.embedding_dim,
@@ -223,15 +239,8 @@ class SETR_PUP(SegmentationTransformer):
 
         self.num_classes = num_classes
 
-    def decode(self, x):
-        x = x.view(
-            x.size(0),
-            int(self.img_dim / self.patch_dim),
-            int(self.img_dim / self.patch_dim),
-            self.embedding_dim,
-        )
-        x = x.permute(0, 3, 1, 2).contiguous()
-
+    def decode(self, x, intmd_x, intmd_layers=None):
+        x = self._reshape_output(x)
         extra_in_channels = int(self.embedding_dim / 4)
         in_channels = [
             self.embedding_dim,
@@ -308,9 +317,128 @@ class SETR_MLA(SegmentationTransformer):
 
         self.num_classes = num_classes
 
-    def decode(self, x):
-        print(x.shape)
-        return x
+    def decode(self, x, intmd_x, intmd_layers=None):
+        assert intmd_layers is not None, "pass the intermediate layers for MLA"
+
+        encoder_outputs = {}
+        for i in intmd_layers:
+            val = str(2 * i - 1)
+            _key = 'Z' + str(i)
+            encoder_outputs[_key] = intmd_x[val]
+
+        net1 = self._define_nonagg_net()
+        temp_x = encoder_outputs['Z24']
+        temp_x = self._reshape_output(temp_x)
+        z24_out, z24_out_intmd = net1(temp_x)
+        z24_out_l1 = z24_out_intmd["layer_1"]
+
+        net2_in, net2_intmd, net2_out = self._define_agg_net()
+        temp_x = encoder_outputs['Z18']
+        temp_x = self._reshape_output(temp_x)
+        z18_in = net2_in(temp_x)
+
+        z18_intmd_in = z18_in + z24_out_l1
+        z18_intmd_out = net2_intmd(z18_intmd_in)
+        z18_out = net2_out(z18_intmd_out)
+
+        net3_in, net3_intmd, net3_out = self._define_agg_net()
+        temp_x = encoder_outputs['Z12']
+        temp_x = self._reshape_output(temp_x)
+        z12_in = net3_in(temp_x)
+
+        z12_intmd_in = z12_in + z18_intmd_in
+        z12_intmd_out = net3_intmd(z12_intmd_in)
+        z12_out = net3_out(z12_intmd_out)
+
+        net4_in, net4_intmd, net4_out = self._define_agg_net()
+        temp_x = encoder_outputs['Z6']
+        temp_x = self._reshape_output(temp_x)
+        z6_in = net4_in(temp_x)
+
+        z6_intmd_in = z6_in + z12_intmd_in
+        z6_intmd_out = net4_intmd(z6_intmd_in)
+        z6_out = net4_out(z6_intmd_out)
+
+        out = torch.cat((z12_out, z18_out, z12_out, z6_out), dim=1)
+        out = nn.Conv2d(
+            in_channels=self.embedding_dim,
+            out_channels=self.num_classes,
+            kernel_size=1,
+            stride=1,
+            padding=self._get_padding('VALID', (1, 1),),
+        )(out)
+        out = nn.Upsample(scale_factor=4, mode='bilinear')(out)
+
+        return out
+
+    # fmt: off
+    def _define_agg_net(self):
+        model_in = IntermediateSequential(return_intermediate=False)
+        model_in.add_module(
+            "layer_1",
+            nn.Conv2d(
+                self.embedding_dim, int(self.embedding_dim / 2), 1, 1,
+                padding=self._get_padding('VALID', (1, 1),),
+            ),
+        )
+
+        model_intmd = IntermediateSequential(return_intermediate=False)
+        model_intmd.add_module(
+            "layer_intmd",
+            nn.Conv2d(
+                int(self.embedding_dim / 2), int(self.embedding_dim / 2), 3, 1,
+                padding=self._get_padding('SAME', (3, 3),),
+            ),
+        )
+
+        model_out = IntermediateSequential(return_intermediate=False)
+        model_out.add_module(
+            "layer_2",
+            nn.Conv2d(
+                int(self.embedding_dim / 2), int(self.embedding_dim / 2), 3, 1,
+                padding=self._get_padding('SAME', (3, 3),),
+            ),
+        )
+        model_out.add_module(
+            "layer_3",
+            nn.Conv2d(
+                int(self.embedding_dim / 2), int(self.embedding_dim / 4), 3, 1,
+                padding=self._get_padding('SAME', (3, 3),),
+            ),
+        )
+        model_out.add_module(
+            "upsample", nn.Upsample(scale_factor=4, mode='bilinear')
+        )
+        return model_in, model_intmd, model_out
+
+    def _define_nonagg_net(self):
+        model = IntermediateSequential()
+        model.add_module(
+            "layer_1",
+            nn.Conv2d(
+                self.embedding_dim, int(self.embedding_dim / 2), 1, 1,
+                padding=self._get_padding('VALID', (1, 1),),
+            ),
+        )
+        model.add_module(
+            "layer_2",
+            nn.Conv2d(
+                int(self.embedding_dim / 2), int(self.embedding_dim / 2), 3, 1,
+                padding=self._get_padding('SAME', (3, 3),),
+            ),
+        )
+        model.add_module(
+            "layer_3",
+            nn.Conv2d(
+                int(self.embedding_dim / 2), int(self.embedding_dim / 4), 3, 1,
+                padding=self._get_padding('SAME', (3, 3),),
+            ),
+        )
+        model.add_module(
+            "upsample", nn.Upsample(scale_factor=4, mode='bilinear')
+        )
+        return model
+    # fmt: on
 
 
 def SETR_Naive_S(dataset='cityscapes'):
@@ -326,8 +454,8 @@ def SETR_Naive_S(dataset='cityscapes'):
 
     num_channels = 3
     patch_dim = 16
-
-    return SETR_Naive(
+    aux_layers = None
+    model = SETR_Naive(
         img_dim,
         patch_dim,
         num_channels,
@@ -341,6 +469,8 @@ def SETR_Naive_S(dataset='cityscapes'):
         conv_patch_representation=False,
         positional_encoding_type="learned",
     )
+
+    return aux_layers, model
 
 
 def SETR_Naive_L(dataset='cityscapes'):
@@ -356,8 +486,8 @@ def SETR_Naive_L(dataset='cityscapes'):
 
     num_channels = 3
     patch_dim = 16
-
-    return SETR_Naive(
+    aux_layers = [10, 15, 20]
+    model = SETR_Naive(
         img_dim,
         patch_dim,
         num_channels,
@@ -371,6 +501,8 @@ def SETR_Naive_L(dataset='cityscapes'):
         conv_patch_representation=False,
         positional_encoding_type="learned",
     )
+
+    return aux_layers, model
 
 
 def SETR_PUP_S(dataset='cityscapes'):
@@ -386,8 +518,8 @@ def SETR_PUP_S(dataset='cityscapes'):
 
     num_channels = 3
     patch_dim = 16
-
-    return SETR_PUP(
+    aux_layers = None
+    model = SETR_PUP(
         img_dim,
         patch_dim,
         num_channels,
@@ -401,6 +533,8 @@ def SETR_PUP_S(dataset='cityscapes'):
         conv_patch_representation=False,
         positional_encoding_type="learned",
     )
+
+    return aux_layers, model
 
 
 def SETR_PUP_L(dataset='cityscapes'):
@@ -416,8 +550,8 @@ def SETR_PUP_L(dataset='cityscapes'):
 
     num_channels = 3
     patch_dim = 16
-
-    return SETR_PUP(
+    aux_layers = [10, 15, 20, 24]
+    model = SETR_PUP(
         img_dim,
         patch_dim,
         num_channels,
@@ -431,6 +565,8 @@ def SETR_PUP_L(dataset='cityscapes'):
         conv_patch_representation=False,
         positional_encoding_type="learned",
     )
+
+    return aux_layers, model
 
 
 def SETR_MLA_S(dataset='cityscapes'):
@@ -446,8 +582,8 @@ def SETR_MLA_S(dataset='cityscapes'):
 
     num_channels = 3
     patch_dim = 16
-
-    return SETR_MLA(
+    aux_layers = None
+    model = SETR_MLA(
         img_dim,
         patch_dim,
         num_channels,
@@ -461,6 +597,8 @@ def SETR_MLA_S(dataset='cityscapes'):
         conv_patch_representation=False,
         positional_encoding_type="learned",
     )
+
+    return aux_layers, model
 
 
 def SETR_MLA_L(dataset='cityscapes'):
@@ -476,8 +614,8 @@ def SETR_MLA_L(dataset='cityscapes'):
 
     num_channels = 3
     patch_dim = 16
-
-    return SETR_MLA(
+    aux_layers = [6, 12, 18, 24]
+    model = SETR_MLA(
         img_dim,
         patch_dim,
         num_channels,
@@ -491,3 +629,12 @@ def SETR_MLA_L(dataset='cityscapes'):
         conv_patch_representation=False,
         positional_encoding_type="learned",
     )
+
+    return aux_layers, model
+
+
+if __name__ == '__main__':
+    aux_layers, net = SETR_MLA_L('pascal')
+    x = torch.randn((1, 3, 480, 480))
+    x, aux_x = net(x, aux_layers)
+    print(x.shape)
