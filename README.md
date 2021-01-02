@@ -6,13 +6,14 @@ Implementation of [Segmentation Transformer](https://arxiv.org/abs/2012.15840) i
 
 ## Features
 
-To Do:
-
 - [x] SETR
   - [x] SETR-Naive
   - [x] SETR-PUP
   - [x] SETR-MLA
 - [x] SETR-Hybrid
+
+To Do:
+
 - [ ] Training Scripts
 
 ## Installation
