@@ -9,7 +9,7 @@ SOTA in semantic segmentation while using transformer style encoders.
 
 To Do:
 
-- [ ] SETR
+- [x] SETR
   - [x] SETR-Naive
   - [x] SETR-PUP
   - [x] SETR-MLA
