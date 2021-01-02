@@ -12,7 +12,7 @@ To Do:
 - [ ] SETR
   - [x] SETR-Naive
   - [x] SETR-PUP
-  - [ ] SETR-MLA
+  - [x] SETR-MLA
 - [ ] SETR-Hybrid
 - [ ] Training Scripts
 

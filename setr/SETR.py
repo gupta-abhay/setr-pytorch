@@ -321,45 +321,45 @@ class SETR_MLA(SegmentationTransformer):
         assert intmd_layers is not None, "pass the intermediate layers for MLA"
 
         encoder_outputs = {}
+        all_keys = []
         for i in intmd_layers:
             val = str(2 * i - 1)
             _key = 'Z' + str(i)
+            all_keys.append(_key)
             encoder_outputs[_key] = intmd_x[val]
+        all_keys.reverse()
 
-        net1 = self._define_nonagg_net()
-        temp_x = encoder_outputs['Z24']
+        net1_in, _, net1_out = self._define_agg_net()
+        temp_x = encoder_outputs[all_keys[0]]
         temp_x = self._reshape_output(temp_x)
-        z24_out, z24_out_intmd = net1(temp_x)
-        z24_out_l1 = z24_out_intmd["layer_1"]
+        key0_intmd_in = net1_in(temp_x)
+        key0_out = net1_out(key0_intmd_in)
 
         net2_in, net2_intmd, net2_out = self._define_agg_net()
-        temp_x = encoder_outputs['Z18']
+        temp_x = encoder_outputs[all_keys[1]]
         temp_x = self._reshape_output(temp_x)
-        z18_in = net2_in(temp_x)
-
-        z18_intmd_in = z18_in + z24_out_l1
-        z18_intmd_out = net2_intmd(z18_intmd_in)
-        z18_out = net2_out(z18_intmd_out)
+        key1_in = net2_in(temp_x)
+        key1_intmd_in = key1_in + key0_intmd_in
+        key1_intmd_out = net2_intmd(key1_intmd_in)
+        key1_out = net2_out(key1_intmd_out)
 
         net3_in, net3_intmd, net3_out = self._define_agg_net()
-        temp_x = encoder_outputs['Z12']
+        temp_x = encoder_outputs[all_keys[2]]
         temp_x = self._reshape_output(temp_x)
-        z12_in = net3_in(temp_x)
-
-        z12_intmd_in = z12_in + z18_intmd_in
-        z12_intmd_out = net3_intmd(z12_intmd_in)
-        z12_out = net3_out(z12_intmd_out)
+        key2_in = net3_in(temp_x)
+        key2_intmd_in = key2_in + key1_intmd_in
+        key2_intmd_out = net3_intmd(key2_intmd_in)
+        key2_out = net3_out(key2_intmd_out)
 
         net4_in, net4_intmd, net4_out = self._define_agg_net()
-        temp_x = encoder_outputs['Z6']
+        temp_x = encoder_outputs[all_keys[3]]
         temp_x = self._reshape_output(temp_x)
-        z6_in = net4_in(temp_x)
+        key3_in = net4_in(temp_x)
+        key3_intmd_in = key3_in + key2_intmd_in
+        key3_intmd_out = net4_intmd(key3_intmd_in)
+        key3_out = net4_out(key3_intmd_out)
 
-        z6_intmd_in = z6_in + z12_intmd_in
-        z6_intmd_out = net4_intmd(z6_intmd_in)
-        z6_out = net4_out(z6_intmd_out)
-
-        out = torch.cat((z12_out, z18_out, z12_out, z6_out), dim=1)
+        out = torch.cat((key0_out, key1_out, key2_out, key3_out), dim=1)
         out = nn.Conv2d(
             in_channels=self.embedding_dim,
             out_channels=self.num_classes,
@@ -410,34 +410,6 @@ class SETR_MLA(SegmentationTransformer):
             "upsample", nn.Upsample(scale_factor=4, mode='bilinear')
         )
         return model_in, model_intmd, model_out
-
-    def _define_nonagg_net(self):
-        model = IntermediateSequential()
-        model.add_module(
-            "layer_1",
-            nn.Conv2d(
-                self.embedding_dim, int(self.embedding_dim / 2), 1, 1,
-                padding=self._get_padding('VALID', (1, 1),),
-            ),
-        )
-        model.add_module(
-            "layer_2",
-            nn.Conv2d(
-                int(self.embedding_dim / 2), int(self.embedding_dim / 2), 3, 1,
-                padding=self._get_padding('SAME', (3, 3),),
-            ),
-        )
-        model.add_module(
-            "layer_3",
-            nn.Conv2d(
-                int(self.embedding_dim / 2), int(self.embedding_dim / 4), 3, 1,
-                padding=self._get_padding('SAME', (3, 3),),
-            ),
-        )
-        model.add_module(
-            "upsample", nn.Upsample(scale_factor=4, mode='bilinear')
-        )
-        return model
     # fmt: on
 
 
@@ -631,10 +603,3 @@ def SETR_MLA_L(dataset='cityscapes'):
     )
 
     return aux_layers, model
-
-
-if __name__ == '__main__':
-    aux_layers, net = SETR_MLA_L('pascal')
-    x = torch.randn((1, 3, 480, 480))
-    x, aux_x = net(x, aux_layers)
-    print(x.shape)
