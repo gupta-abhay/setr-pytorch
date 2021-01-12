@@ -11,10 +11,13 @@ from IntmdSequential import IntermediateSequential
 __all__ = [
     'SETR_Naive_S',
     'SETR_Naive_L',
+    'SETR_Naive_H',
     'SETR_PUP_S',
     'SETR_PUP_L',
+    'SETR_PUP_H',
     'SETR_MLA_S',
     'SETR_MLA_L',
+    'SETR_MLA_H',
 ]
 
 
@@ -92,7 +95,7 @@ class SegmentationTransformer(nn.Module):
             # combine embedding w/ conv patch distribution
             x = self.conv_x(x)
             x = x.permute(0, 2, 3, 1).contiguous()
-            x = x.view(x.size(0), -1, self.flatten_dim)
+            x = x.view(x.size(0), -1, self.embedding_dim)
         else:
             x = (
                 x.unfold(2, self.patch_dim, self.patch_dim)
@@ -477,6 +480,38 @@ def SETR_Naive_L(dataset='cityscapes'):
     return aux_layers, model
 
 
+def SETR_Naive_H(dataset='cityscapes'):
+    if dataset.lower() == 'cityscapes':
+        img_dim = 768
+        num_classes = 19
+    elif dataset.lower() == 'ade20k':
+        img_dim = 512
+        num_classes = 150
+    elif dataset.lower() == 'pascal':
+        img_dim = 480
+        num_classes = 59
+
+    num_channels = 3
+    patch_dim = 16
+    aux_layers = None
+    model = SETR_Naive(
+        img_dim,
+        patch_dim,
+        num_channels,
+        num_classes,
+        embedding_dim=1280,
+        num_heads=16,
+        num_layers=32,
+        hidden_dim=5120,
+        dropout_rate=0.1,
+        attn_dropout_rate=0.1,
+        conv_patch_representation=False,
+        positional_encoding_type="learned",
+    )
+
+    return aux_layers, model
+
+
 def SETR_PUP_S(dataset='cityscapes'):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
@@ -541,6 +576,38 @@ def SETR_PUP_L(dataset='cityscapes'):
     return aux_layers, model
 
 
+def SETR_PUP_H(dataset='cityscapes'):
+    if dataset.lower() == 'cityscapes':
+        img_dim = 768
+        num_classes = 19
+    elif dataset.lower() == 'ade20k':
+        img_dim = 512
+        num_classes = 150
+    elif dataset.lower() == 'pascal':
+        img_dim = 480
+        num_classes = 59
+
+    num_channels = 3
+    patch_dim = 16
+    aux_layers = [10, 15, 20, 24]
+    model = SETR_PUP(
+        img_dim,
+        patch_dim,
+        num_channels,
+        num_classes,
+        embedding_dim=1280,
+        num_heads=16,
+        num_layers=32,
+        hidden_dim=5120,
+        dropout_rate=0.1,
+        attn_dropout_rate=0.1,
+        conv_patch_representation=False,
+        positional_encoding_type="learned",
+    )
+
+    return aux_layers, model
+
+
 def SETR_MLA_S(dataset='cityscapes'):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
@@ -596,6 +663,38 @@ def SETR_MLA_L(dataset='cityscapes'):
         num_heads=16,
         num_layers=24,
         hidden_dim=4096,
+        dropout_rate=0.1,
+        attn_dropout_rate=0.1,
+        conv_patch_representation=False,
+        positional_encoding_type="learned",
+    )
+
+    return aux_layers, model
+
+
+def SETR_MLA_H(dataset='cityscapes'):
+    if dataset.lower() == 'cityscapes':
+        img_dim = 768
+        num_classes = 19
+    elif dataset.lower() == 'ade20k':
+        img_dim = 512
+        num_classes = 150
+    elif dataset.lower() == 'pascal':
+        img_dim = 480
+        num_classes = 59
+
+    num_channels = 3
+    patch_dim = 16
+    aux_layers = [6, 12, 18, 24]
+    model = SETR_MLA(
+        img_dim,
+        patch_dim,
+        num_channels,
+        num_classes,
+        embedding_dim=1280,
+        num_heads=16,
+        num_layers=32,
+        hidden_dim=5120,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
         conv_patch_representation=False,
