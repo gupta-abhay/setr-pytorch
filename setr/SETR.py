@@ -33,7 +33,7 @@ class SegmentationTransformer(nn.Module):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=False,
+        conv_patch_representation=_conv_repr,
         positional_encoding_type="learned",
     ):
         super(SegmentationTransformer, self).__init__()
@@ -167,7 +167,7 @@ class SETR_Naive(SegmentationTransformer):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=False,
+        conv_patch_representation=_conv_repr,
         positional_encoding_type="learned",
     ):
         super(SETR_Naive, self).__init__(
@@ -223,7 +223,7 @@ class SETR_PUP(SegmentationTransformer):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=False,
+        conv_patch_representation=_conv_repr,
         positional_encoding_type="learned",
     ):
         super(SETR_PUP, self).__init__(
@@ -301,7 +301,7 @@ class SETR_MLA(SegmentationTransformer):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=False,
+        conv_patch_representation=_conv_repr,
         positional_encoding_type="learned",
     ):
         super(SETR_MLA, self).__init__(
@@ -416,7 +416,7 @@ class SETR_MLA(SegmentationTransformer):
     # fmt: on
 
 
-def SETR_Naive_S(dataset='cityscapes'):
+def SETR_Naive_S(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -441,14 +441,14 @@ def SETR_Naive_S(dataset='cityscapes'):
         hidden_dim=3072,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_Naive_L(dataset='cityscapes'):
+def SETR_Naive_L(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -473,14 +473,14 @@ def SETR_Naive_L(dataset='cityscapes'):
         hidden_dim=4096,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_Naive_H(dataset='cityscapes'):
+def SETR_Naive_H(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -505,14 +505,14 @@ def SETR_Naive_H(dataset='cityscapes'):
         hidden_dim=5120,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_PUP_S(dataset='cityscapes'):
+def SETR_PUP_S(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -537,14 +537,14 @@ def SETR_PUP_S(dataset='cityscapes'):
         hidden_dim=3072,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_PUP_L(dataset='cityscapes'):
+def SETR_PUP_L(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -569,14 +569,14 @@ def SETR_PUP_L(dataset='cityscapes'):
         hidden_dim=4096,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_PUP_H(dataset='cityscapes'):
+def SETR_PUP_H(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -601,14 +601,14 @@ def SETR_PUP_H(dataset='cityscapes'):
         hidden_dim=5120,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_MLA_S(dataset='cityscapes'):
+def SETR_MLA_S(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -633,14 +633,14 @@ def SETR_MLA_S(dataset='cityscapes'):
         hidden_dim=3072,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_MLA_L(dataset='cityscapes'):
+def SETR_MLA_L(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -665,14 +665,14 @@ def SETR_MLA_L(dataset='cityscapes'):
         hidden_dim=4096,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
 
 
-def SETR_MLA_H(dataset='cityscapes'):
+def SETR_MLA_H(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
     if dataset.lower() == 'cityscapes':
         img_dim = 768
         num_classes = 19
@@ -697,8 +697,8 @@ def SETR_MLA_H(dataset='cityscapes'):
         hidden_dim=5120,
         dropout_rate=0.1,
         attn_dropout_rate=0.1,
-        conv_patch_representation=False,
-        positional_encoding_type="learned",
+        conv_patch_representation=_conv_repr,
+        positional_encoding_type=_pe_type,
     )
 
     return aux_layers, model
