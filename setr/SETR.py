@@ -89,6 +89,9 @@ class SegmentationTransformer(nn.Module):
         else:
             self.conv_x = None
 
+    def _init_decode(self):
+        raise NotImplementedError("Should be implemented in child class!!")
+
     def encode(self, x):
         n, c, h, w = x.shape
         if self.conv_patch_representation:
@@ -185,28 +188,36 @@ class SETR_Naive(SegmentationTransformer):
         )
 
         self.num_classes = num_classes
+        self._init_decode()
 
-    def decode(self, x, intmd_x, intmd_layers=None):
-        x = self._reshape_output(x)
-        x = nn.Conv2d(
+    def _init_decode(self):
+        self.conv1 = nn.Conv2d(
             in_channels=self.embedding_dim,
             out_channels=self.embedding_dim,
             kernel_size=1,
             stride=1,
             padding=self._get_padding('VALID', (1, 1),),
-        )(x)
-        x = nn.BatchNorm2d(self.embedding_dim)(x)
-        x = nn.ReLU()(x)
-
-        x = nn.Conv2d(
+        )
+        self.bn1 = nn.BatchNorm2d(self.embedding_dim)
+        self.act1 = nn.ReLU()
+        self.conv2 = nn.Conv2d(
             in_channels=self.embedding_dim,
             out_channels=self.num_classes,
             kernel_size=1,
             stride=1,
             padding=self._get_padding('VALID', (1, 1),),
-        )(x)
-        x = nn.Upsample(scale_factor=self.patch_dim, mode='bilinear')(x)
+        )
+        self.upsample = nn.Upsample(
+            scale_factor=self.patch_dim, mode='bilinear'
+        )
 
+    def decode(self, x, intmd_x, intmd_layers=None):
+        x = self._reshape_output(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.act1(x)
+        x = self.conv2(x)
+        x = self.upsample(x)
         return x
 
 
@@ -241,9 +252,9 @@ class SETR_PUP(SegmentationTransformer):
         )
 
         self.num_classes = num_classes
+        self._init_decode()
 
-    def decode(self, x, intmd_x, intmd_layers=None):
-        x = self._reshape_output(x)
+    def _init_decode(self):
         extra_in_channels = int(self.embedding_dim / 4)
         in_channels = [
             self.embedding_dim,
@@ -260,13 +271,11 @@ class SETR_PUP(SegmentationTransformer):
             self.num_classes,
         ]
 
-        conv_layers = []
-        upsample_layers = []
-
+        modules = []
         for i, (in_channel, out_channel) in enumerate(
             zip(in_channels, out_channels)
         ):
-            conv_layers.append(
+            modules.append(
                 nn.Conv2d(
                     in_channels=in_channel,
                     out_channels=out_channel,
@@ -276,15 +285,14 @@ class SETR_PUP(SegmentationTransformer):
                 )
             )
             if i != 4:
-                upsample_layers.append(
-                    nn.Upsample(scale_factor=2, mode='bilinear')
-                )
+                modules.append(nn.Upsample(scale_factor=2, mode='bilinear'))
+        self.decode_net = IntermediateSequential(
+            *modules, return_intermediate=False
+        )
 
-        for (conv_layer, upsample_layer) in zip(conv_layers, upsample_layers):
-            x = conv_layer(x)
-            x = upsample_layer(x)
-
-        x = conv_layers[-1](x)
+    def decode(self, x, intmd_x, intmd_layers=None):
+        x = self._reshape_output(x)
+        x = self.decode_net(x)
         return x
 
 
@@ -319,6 +327,29 @@ class SETR_MLA(SegmentationTransformer):
         )
 
         self.num_classes = num_classes
+        self._init_decode()
+
+    def _init_decode(self):
+        self.net1_in, self.net1_intmd, self.net1_out = self._define_agg_net()
+        self.net2_in, self.net2_intmd, self.net2_out = self._define_agg_net()
+        self.net3_in, self.net3_intmd, self.net3_out = self._define_agg_net()
+        self.net4_in, self.net4_intmd, self.net4_out = self._define_agg_net()
+
+        # fmt: off
+        self.output_net = IntermediateSequential(return_intermediate=False)
+        self.output_net.add_module(
+            "conv_1",
+            nn.Conv2d(
+                in_channels=self.embedding_dim, out_channels=self.num_classes,
+                kernel_size=1, stride=1,
+                padding=self._get_padding('VALID', (1, 1),),
+            )
+        )
+        self.output_net.add_module(
+            "upsample_1",
+            nn.Upsample(scale_factor=4, mode='bilinear')
+        )
+        # fmt: on
 
     def decode(self, x, intmd_x, intmd_layers=None):
         assert intmd_layers is not None, "pass the intermediate layers for MLA"
@@ -332,46 +363,34 @@ class SETR_MLA(SegmentationTransformer):
             encoder_outputs[_key] = intmd_x[val]
         all_keys.reverse()
 
-        net1_in, _, net1_out = self._define_agg_net()
         temp_x = encoder_outputs[all_keys[0]]
         temp_x = self._reshape_output(temp_x)
-        key0_intmd_in = net1_in(temp_x)
-        key0_out = net1_out(key0_intmd_in)
+        key0_intmd_in = self.net1_in(temp_x)
+        key0_out = self.net1_out(key0_intmd_in)
 
-        net2_in, net2_intmd, net2_out = self._define_agg_net()
         temp_x = encoder_outputs[all_keys[1]]
         temp_x = self._reshape_output(temp_x)
-        key1_in = net2_in(temp_x)
+        key1_in = self.net2_in(temp_x)
         key1_intmd_in = key1_in + key0_intmd_in
-        key1_intmd_out = net2_intmd(key1_intmd_in)
-        key1_out = net2_out(key1_intmd_out)
+        key1_intmd_out = self.net2_intmd(key1_intmd_in)
+        key1_out = self.net2_out(key1_intmd_out)
 
-        net3_in, net3_intmd, net3_out = self._define_agg_net()
         temp_x = encoder_outputs[all_keys[2]]
         temp_x = self._reshape_output(temp_x)
-        key2_in = net3_in(temp_x)
+        key2_in = self.net3_in(temp_x)
         key2_intmd_in = key2_in + key1_intmd_in
-        key2_intmd_out = net3_intmd(key2_intmd_in)
-        key2_out = net3_out(key2_intmd_out)
+        key2_intmd_out = self.net3_intmd(key2_intmd_in)
+        key2_out = self.net3_out(key2_intmd_out)
 
-        net4_in, net4_intmd, net4_out = self._define_agg_net()
         temp_x = encoder_outputs[all_keys[3]]
         temp_x = self._reshape_output(temp_x)
-        key3_in = net4_in(temp_x)
+        key3_in = self.net4_in(temp_x)
         key3_intmd_in = key3_in + key2_intmd_in
-        key3_intmd_out = net4_intmd(key3_intmd_in)
-        key3_out = net4_out(key3_intmd_out)
+        key3_intmd_out = self.net4_intmd(key3_intmd_in)
+        key3_out = self.net4_out(key3_intmd_out)
 
         out = torch.cat((key0_out, key1_out, key2_out, key3_out), dim=1)
-        out = nn.Conv2d(
-            in_channels=self.embedding_dim,
-            out_channels=self.num_classes,
-            kernel_size=1,
-            stride=1,
-            padding=self._get_padding('VALID', (1, 1),),
-        )(out)
-        out = nn.Upsample(scale_factor=4, mode='bilinear')(out)
-
+        out = self.output_net(out)
         return out
 
     # fmt: off
@@ -685,7 +704,7 @@ def SETR_MLA_H(dataset='cityscapes', _conv_repr=False, _pe_type="learned"):
 
     num_channels = 3
     patch_dim = 16
-    aux_layers = [6, 12, 18, 24]
+    aux_layers = [8, 16, 24, 32]
     model = SETR_MLA(
         img_dim,
         patch_dim,
