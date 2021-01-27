@@ -33,7 +33,7 @@ class SegmentationTransformer(nn.Module):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=_conv_repr,
+        conv_patch_representation=False,
         positional_encoding_type="learned",
     ):
         super(SegmentationTransformer, self).__init__()
@@ -167,7 +167,7 @@ class SETR_Naive(SegmentationTransformer):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=_conv_repr,
+        conv_patch_representation=False,
         positional_encoding_type="learned",
     ):
         super(SETR_Naive, self).__init__(
@@ -223,7 +223,7 @@ class SETR_PUP(SegmentationTransformer):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=_conv_repr,
+        conv_patch_representation=False,
         positional_encoding_type="learned",
     ):
         super(SETR_PUP, self).__init__(
@@ -301,7 +301,7 @@ class SETR_MLA(SegmentationTransformer):
         hidden_dim,
         dropout_rate=0.0,
         attn_dropout_rate=0.0,
-        conv_patch_representation=_conv_repr,
+        conv_patch_representation=False,
         positional_encoding_type="learned",
     ):
         super(SETR_MLA, self).__init__(
